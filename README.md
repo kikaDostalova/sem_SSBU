@@ -1,1 +1,1 @@
-# sem_kostolny
+# sem_SSBU
