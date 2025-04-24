@@ -1,0 +1,50 @@
+# IDE and editor folders
+.idea/
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+#  VS-specific metadata and cache files
+*.sln
+*.db
+*.db-shm
+*.db-wal
+*.vsidx
+*.csproj.user
+*.suo
+*.wsuo
+
+# Build / runtime / debug files
+*.log
+*.obj
+*.pyc
+*.pyo
+*.pyd
+__pycache__/
+build/
+dist/
+*.egg-info/
+
+# Python environments
+.env
+.venv
+env/
+venv/
+ENV/
+Pipfile.lock
+poetry.lock
+
+# System/OS files
+.DS_Store
+Thumbs.db
+ehthumbs.db
+desktop.ini
+
+# Jupyter/Notebook cache
+.ipynb_checkpoints/
+
+# Git
+*.orig
+*.rej
