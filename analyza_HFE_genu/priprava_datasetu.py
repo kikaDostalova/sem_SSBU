@@ -1,40 +1,28 @@
 import pandas as pd
-import numpy as np
 
-# nacitanie CSV suboru so spravnym oddelovacom a ignorovanim zbytocnych prazdnych stlpcov
-df = pd.read_csv("SSBU25_dataset.csv", sep=";", usecols=range(12))
+# Nacitanie CSV so spravnym oddelovacom
+df = pd.read_csv("SSBU25_dataset.csv", sep=";", engine="python", encoding="utf-8-sig", dtype=str)
 
-# oprava hlaviciek stlpcov (jednoduchsie nazvy)
-df.columns = [
-    "id", "validovany_vysledok", "datum_odber", "cas_odber",
-    "datum_prijem", "cas_prijem", "pohlavie", "vek",
-    "diagnoza", "H63D", "S65C", "C282Y"
-]
+# Spojenie datum+cas pre 'validovany vysledok' a 'prijem vzorky'
+df['validovany_vysledok'] = df.iloc[:, 1].fillna('') + ' ' + df.iloc[:, 2].fillna('')
+df['prijem_vzorky'] = df.iloc[:, 3].fillna('') + ' ' + df.iloc[:, 4].fillna('')
 
-# spojenie datumov a casov do datetime
-df["datetime_odber"] = pd.to_datetime(df["datum_odber"] + " " + df["cas_odber"], errors="coerce", dayfirst=True)
-df["datetime_prijem"] = pd.to_datetime(df["datum_prijem"] + " " + df["cas_prijem"], errors="coerce", dayfirst=True)
+# Vymazanie povodnych datum+cas stlpcov + unnamed stlpce
+stlpce_na_mazanie = ['Unnamed: 3', 'Unnamed: 5'] + [col for col in df.columns if "Unnamed" in col]
+df = df.drop(columns=stlpce_na_mazanie + [df.columns[1], df.columns[2], df.columns[3], df.columns[4]])
 
-# odstranenie povodnych stlpcov datumu/casu
-df.drop(columns=["datum_odber", "cas_odber", "datum_prijem", "cas_prijem"], inplace=True)
+# Odstranenie riadkov s prazdnym ID
+df = df[df['id'].notna() & (df['id'].str.strip() != "")]
 
-# uprava veku – vezme prvu hodnotu pred ciarkou a prevedie na int
-df["vek"] = df["vek"].astype(str).str.split(",").str[0].str.strip()
-df["vek"] = pd.to_numeric(df["vek"], errors='coerce')
+# Validacia veku: kontrolujeme len prvu zlozku (napr. 59 z "59,70")
+def is_valid_age(age_str):
+    try:
+        age_main = float(age_str.split(',')[0].replace(',', '.'))
+        return age_main <= 120
+    except:
+        return False
 
-# standardizacia genotypov
-genotyp_map = {
-    "normal": "wt/wt",
-    "heterozygot": "wt/mut",
-    "mutant": "mut/mut",
-    "homozygot": "mut/mut"  # pre istotu aj ak by sa vyskytol
-}
+df = df[df['vek'].apply(is_valid_age)]
 
-for col in ["H63D", "S65C", "C282Y"]:
-    df[col] = df[col].map(genotyp_map).fillna(df[col])
-
-# vypis par zaznamov
-print(df.head())
-
-# ulozenie cisteho datasetu
-df.to_csv("SSBU25_dataset_cleaned.csv", index=False)
+# Ulozenie upraveneho datasetu
+df.to_csv("SSBU25_dataset_cleaned.csv", index=False, sep=";", encoding="utf-8-sig")
