@@ -96,48 +96,71 @@ if vyber_sekciu == "Úvodná analýza":
         n = obs.sum()
         if n == 0:
             return None
-        p = (2*obs["wt/wt"] + obs["wt/mut"]) / (2*n)
+        p = (2 * obs["wt/wt"] + obs["wt/mut"]) / (2 * n)
         q = 1 - p
-        exp = [p**2 * n, 2*p*q * n, q**2 * n]
-        chi2_stat = sum((obs - exp)**2 / exp)
+        exp = [p ** 2 * n, 2 * p * q * n, q ** 2 * n]
+        chi2_stat = sum((obs - exp) ** 2 / exp)
         pval = 1 - chi2.cdf(chi2_stat, df=1)
+        vysledok_text = "Odchýlka" if pval < 0.05 else "Súlad"
         df_result = pd.DataFrame({
             "Pozorované": obs,
             "Očakávané": exp,
-            "p-hodnota": [pval]*3
+            "Chi²": [chi2_stat] * 3,
+            "p-hodnota": [pval] * 3,
+            "Výsledok": [vysledok_text] * 3
         })
         df_result.index = df_result.index.map(lambda x: genotyp_label.get(x, x))
         return df_result
 
-    for mut, col in mutacie.items():
-        st.subheader(f"Mutácia {mut}")
-        if col in df.columns:
-            genotypy = premapuj_na_genotyp(df[col])
-            result = hardy_weinberg_test(genotypy)
-            if result is not None:
-                st.dataframe(result)
-            else:
-                st.warning(f"Mutácia {mut}: Nedostatočné dáta pre test.")
-        else:
-            st.warning(f"Stĺpec pre {mut} ({col}) sa nenašiel v datasete.")
-
     st.header("📊 Percentá genotypov a prenášači")
 
-    selected = st.selectbox("Vyber mutáciu", list(mutacie.keys()))
-    col = mutacie[selected]
+    selected = st.selectbox("Vyber mutáciu", ["Všetky mutácie"] + list(mutacie.keys()))
 
-    if col in df.columns:
-        genotypy = premapuj_na_genotyp(df[col])
-        counts = genotypy.value_counts(normalize=True).round(3) * 100
-        counts.index = counts.index.map(lambda x: genotyp_label.get(x, x))
-        total = len(genotypy)
-        pren = genotypy.isin(["wt/mut", "mut/mut"]).sum()
-        pred = genotypy.eq("mut/mut").sum()
-        st.markdown(f"- **Prenášači**: {pren} pacientov ({(pren/total)*100:.1f} %)")
-        st.markdown(f"- **Predispozícia**: {pred} pacientov ({(pred/total)*100:.1f} %)")
-        st.dataframe(counts.rename("Percentá").to_frame())
+    if selected == "Všetky mutácie":
+        vysledky = []
+        for mut_key, col in mutacie.items():
+            if col in df.columns:
+                genotypy = premapuj_na_genotyp(df[col])
+                counts = genotypy.value_counts(normalize=True).round(3) * 100
+                counts.index = counts.index.map(lambda x: genotyp_label.get(x, x))
+                for genotyp, percent in counts.items():
+                    vysledky.append({
+                        "Mutácia": mut_key,
+                        "Genotyp": genotyp,
+                        "Percento": percent
+                    })
+        vysledky_df = pd.DataFrame(vysledky)
+        st.dataframe(vysledky_df)
+
+        # Celkový sumár prenášačov a predispozície
+        pren = df[
+            (df[mutacie["C282Y"]].str.strip().str.lower() == "heterozygot") |
+            (df[mutacie["H63D"]].str.strip().str.lower() == "heterozygot") |
+            (df[mutacie["S65C"]].str.strip().str.lower() == "heterozygot")
+        ]
+        predispozicia = df[
+            (df[mutacie["C282Y"]].str.strip().str.lower() == "homozygot") |
+            (
+                (df[mutacie["C282Y"]].str.strip().str.lower() == "heterozygot") &
+                (df[mutacie["H63D"]].str.strip().str.lower() == "heterozygot")
+            )
+        ]
+        st.markdown(f"- **Prenášači**: {len(pren)} pacientov ({(len(pren)/len(df))*100:.1f} %)")
+        st.markdown(f"- **Genetická predispozícia**: {len(predispozicia)} pacientov ({(len(predispozicia)/len(df))*100:.1f} %)")
     else:
-        st.warning(f"Mutácia {selected} nie je dostupná v datasete.")
+        col = mutacie[selected]
+        if col in df.columns:
+            genotypy = premapuj_na_genotyp(df[col])
+            counts = genotypy.value_counts(normalize=True).round(3) * 100
+            counts.index = counts.index.map(lambda x: genotyp_label.get(x, x))
+            total = len(genotypy)
+            pren = genotypy.isin(["wt/mut", "mut/mut"]).sum()
+            pred = genotypy.eq("mut/mut").sum()
+            st.markdown(f"- **Prenášači**: {pren} pacientov ({(pren/total)*100:.1f} %)")
+            st.markdown(f"- **Predispozícia**: {pred} pacientov ({(pred/total)*100:.1f} %)")
+            st.dataframe(counts.rename("Percentá").to_frame())
+        else:
+            st.warning(f"Mutácia {selected} nie je dostupná v datasete.")
 
     st.header("📚 Súvislosť HFE mutácií s pečeňovými diagnózami")
 
@@ -278,17 +301,16 @@ elif vyber_sekciu == "Analýza diagnóz podľa MKCH-10":
     else:
         st.success("✅ V datasete sa nenachádzajú žiadne zastarané MKCH-10 kódy.")
 
-# # ===== Export sekcia v Sidebare =====
-#     st.sidebar.header("📤 Export reportu")
+# ===== Export sekcia v Sidebare =====
+st.sidebar.header("📤 Export reportu")
 
-#     if st.sidebar.button("Exportovať report (.docx)"):
-#         with st.spinner("Generuje sareport..."):
-#             report_path = export_report.generate_report(df)
-#             with open(report_path, "rb") as f:
-#                 st.sidebar.download_button(
-#                     label="Stiahni report",
-#                     data=f,
-#                     file_name="HFE_gene_analysis_report.docx",
-#                     mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-#                 )
-# 
+if st.sidebar.button("Exportovať report (.docx)"):
+    with st.spinner("🛠️ Generujes sa Word report..."):
+        report_path = export_report.generate_report()
+        with open(report_path, "rb") as f:
+            st.sidebar.download_button(
+                label="📄 Stiahnúť report",
+                data=f,
+                file_name="Analyza_HFE_gen.docx",
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            )
