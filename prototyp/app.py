@@ -26,13 +26,15 @@ genotyp_label = {
 
 # Pomocná funkcia na premapovanie výsledkov na genotypy
 def premapuj_na_genotyp(series):
-    return series.map({
+    mapping = {
         "normal": "wt/wt",
         "heterozygot": "wt/mut",
-        "mutant": "mut/mut",
+        "homozygot": "mut/mut",
         "mutácia": "mut/mut",
+        "mutant": "mut/mut",
         "patogénna": "mut/mut"
-    }).fillna("neznamy")
+    }
+    return series.str.strip().str.lower().map(mapping).fillna("neznamy")
 
 # 📥 Upload a čistenie datasetu v Sidebar
 st.sidebar.header("📥 Nahrajte CSV súbor")
@@ -74,6 +76,9 @@ if uploaded_file:
             matching_cols = [col for col in df.columns if expected_part in col and "HFE" in col]
             if matching_cols:
                 mutacie[mut_short] = matching_cols[0]
+        # Uloženie očisteného datasetu
+        os.makedirs("sem_SSBU", exist_ok=True)
+        df.to_csv("sem_SSBU/SSBU25_dataset_cleaned.csv", index=False, sep=";", encoding="utf-8-sig")
 
         st.success("✅ Dataset bol úspešne načítaný a očistený.")
 else:
@@ -96,21 +101,32 @@ if vyber_sekciu == "Úvodná analýza":
         n = obs.sum()
         if n == 0:
             return None
-        p = (2 * obs["wt/wt"] + obs["wt/mut"]) / (2 * n)
+        p = (2*obs["wt/wt"] + obs["wt/mut"]) / (2*n)
         q = 1 - p
-        exp = [p ** 2 * n, 2 * p * q * n, q ** 2 * n]
-        chi2_stat = sum((obs - exp) ** 2 / exp)
+        exp = [p**2 * n, 2*p*q * n, q**2 * n]
+        chi2_stat = sum((obs - exp)**2 / exp)
         pval = 1 - chi2.cdf(chi2_stat, df=1)
-        vysledok_text = "Odchýlka" if pval < 0.05 else "Súlad"
         df_result = pd.DataFrame({
             "Pozorované": obs,
             "Očakávané": exp,
-            "Chi²": [chi2_stat] * 3,
-            "p-hodnota": [pval] * 3,
-            "Výsledok": [vysledok_text] * 3
+            "Chi² príspevok": ((obs - exp)**2 / exp).round(3),
+            "p-hodnota": [pval]*3,
+            "Výsledok": ["Odchýlka" if pval < 0.05 else "Súlad"]*3
         })
         df_result.index = df_result.index.map(lambda x: genotyp_label.get(x, x))
         return df_result
+
+    for mut, col in mutacie.items():
+        st.subheader(f"Mutácia {mut}")
+        if col in df.columns:
+            genotypy = premapuj_na_genotyp(df[col])
+            result = hardy_weinberg_test(genotypy)
+            if result is not None:
+                st.dataframe(result)
+            else:
+                st.warning(f"Mutácia {mut}: Nedostatočné dáta pre test.")
+        else:
+            st.warning(f"Stĺpec pre {mut} ({col}) sa nenašiel v datasete.")
 
     st.header("📊 Percentá genotypov a prenášači")
 
@@ -186,49 +202,100 @@ if vyber_sekciu == "Úvodná analýza":
 elif vyber_sekciu == "Grafy":
     st.header("📊 Grafy - rozdelenie genotypov, veku, pohlavia a diagnóz")
 
-    st.subheader("Vyber mutáciu")
-    selected_mut = st.selectbox("Vyber mutáciu", list(mutacie.keys()), key="grafy")
+    selected_mut = st.selectbox(
+        "Vyberte mutáciu alebo porovnanie všetkých:",
+        list(mutacie.keys()) + ["Porovnať všetky"]
+    )
 
-    col = mutacie[selected_mut]
+    if selected_mut != "Porovnať všetky":
+        col = mutacie[selected_mut]
+        if col in df.columns:
+            genotypy = premapuj_na_genotyp(df[col])
 
-    if col in df.columns:
-        genotypy = premapuj_na_genotyp(df[col])
+            # 1. Rozdelenie genotypov
+            st.subheader("📊 Rozdelenie genotypov")
+            fig1, ax1 = plt.subplots()
+            sns.countplot(x=genotypy.map(lambda x: genotyp_label.get(x, x)), ax=ax1, order=[genotyp_label["wt/wt"], genotyp_label["wt/mut"], genotyp_label["mut/mut"]])
+            ax1.set_xlabel("Genotyp")
+            ax1.set_ylabel("Počet pacientov")
+            st.pyplot(fig1)
 
-        # 1. Rozdelenie genotypov
-        st.subheader("📊 Rozdelenie genotypov")
-        fig1, ax1 = plt.subplots()
-        sns.countplot(x=genotypy.map(lambda x: genotyp_label.get(x, x)), ax=ax1, order=[genotyp_label["wt/wt"], genotyp_label["wt/mut"], genotyp_label["mut/mut"]])
-        ax1.set_xlabel("Genotyp")
-        ax1.set_ylabel("Počet pacientov")
-        st.pyplot(fig1)
+            # 2. Vzťah genotypu a veku
+            st.subheader("📈 Vek podľa genotypu")
+            fig2, ax2 = plt.subplots()
+            sns.boxplot(x=genotypy.map(lambda x: genotyp_label.get(x, x)), y=df["vek"], ax=ax2, order=[genotyp_label["wt/wt"], genotyp_label["wt/mut"], genotyp_label["mut/mut"]])
+            ax2.set_xlabel("Genotyp")
+            ax2.set_ylabel("Vek")
+            st.pyplot(fig2)
 
-        # 2. Vzťah genotypu a veku
-        st.subheader("📈 Vek podľa genotypu")
-        fig2, ax2 = plt.subplots()
-        sns.boxplot(x=genotypy.map(lambda x: genotyp_label.get(x, x)), y=df["vek"], ax=ax2, order=[genotyp_label["wt/wt"], genotyp_label["wt/mut"], genotyp_label["mut/mut"]])
-        ax2.set_xlabel("Genotyp")
-        ax2.set_ylabel("Vek")
-        st.pyplot(fig2)
+            # 3. Vzťah genotypu a pohlavia
+            st.subheader("🚻 Pohlavie podľa genotypu")
+            fig3, ax3 = plt.subplots()
+            sns.countplot(x=genotypy.map(lambda x: genotyp_label.get(x, x)), hue=df["pohavie"], ax=ax3, order=[genotyp_label["wt/wt"], genotyp_label["wt/mut"], genotyp_label["mut/mut"]])
+            ax3.set_xlabel("Genotyp")
+            ax3.set_ylabel("Počet pacientov")
+            st.pyplot(fig3)
 
-        # 3. Vzťah genotypu a pohlavia
-        st.subheader("🚻 Pohlavie podľa genotypu")
-        fig3, ax3 = plt.subplots()
-        sns.countplot(x=genotypy.map(lambda x: genotyp_label.get(x, x)), hue=df["pohavie"], ax=ax3, order=[genotyp_label["wt/wt"], genotyp_label["wt/mut"], genotyp_label["mut/mut"]])
-        ax3.set_xlabel("Genotyp")
-        ax3.set_ylabel("Počet pacientov")
-        st.pyplot(fig3)
-
-        # 4. Vzťah genotypu a diagnózy
-        st.subheader("🩺 Diagnózy podľa genotypu (pečeňové ochorenia)")
-        df["pecen_diag"] = df["diagnoza MKCH-10"].isin(["K76.0", "K75.9"])
-        fig4, ax4 = plt.subplots()
-        sns.countplot(x=genotypy.map(lambda x: genotyp_label.get(x, x)), hue=df["pecen_diag"], ax=ax4, order=[genotyp_label["wt/wt"], genotyp_label["wt/mut"], genotyp_label["mut/mut"]])
-        ax4.set_xlabel("Genotyp")
-        ax4.set_ylabel("Počet pacientov")
-        ax4.legend(title="Pečeňové ochorenie", labels=["Nie", "Áno"])
-        st.pyplot(fig4)
+            # 4. Vzťah genotypu a pečeňových ochorení
+            st.subheader("🩺 Diagnózy podľa genotypu (pečeňové ochorenia)")
+            df["pecen_diag"] = df["diagnoza MKCH-10"].isin(["K76.0", "K75.9"])
+            fig4, ax4 = plt.subplots()
+            sns.countplot(x=genotypy.map(lambda x: genotyp_label.get(x, x)), hue=df["pecen_diag"], ax=ax4, order=[genotyp_label["wt/wt"], genotyp_label["wt/mut"], genotyp_label["mut/mut"]])
+            ax4.set_xlabel("Genotyp")
+            ax4.set_ylabel("Počet pacientov")
+            ax4.legend(title="Pečeňové ochorenie", labels=["Nie", "Áno"])
+            st.pyplot(fig4)
     else:
-        st.warning(f"Mutácia {selected_mut} nie je dostupná v datasete.")
+        # POROVNANIE VŠETKÝCH
+        st.subheader("📊 Rozdelenie genotypov (všetky mutácie)")
+        cols = st.columns(len(mutacie))
+        for i, (mut_key, col_name) in enumerate(mutacie.items()):
+            with cols[i]:
+                genotypy = premapuj_na_genotyp(df[col_name])
+                fig, ax = plt.subplots()
+                sns.countplot(x=genotypy.map(lambda x: genotyp_label.get(x, x)), ax=ax, order=[genotyp_label["wt/wt"], genotyp_label["wt/mut"], genotyp_label["mut/mut"]])
+                ax.set_title(f"{mut_key}")
+                ax.set_xlabel("")
+                ax.set_ylabel("")
+                st.pyplot(fig)
+
+        st.subheader("📈 Vek podľa genotypu (všetky mutácie)")
+        cols = st.columns(len(mutacie))
+        for i, (mut_key, col_name) in enumerate(mutacie.items()):
+            with cols[i]:
+                genotypy = premapuj_na_genotyp(df[col_name])
+                fig, ax = plt.subplots()
+                sns.boxplot(x=genotypy.map(lambda x: genotyp_label.get(x, x)), y=df["vek"], ax=ax, order=[genotyp_label["wt/wt"], genotyp_label["wt/mut"], genotyp_label["mut/mut"]])
+                ax.set_title(f"{mut_key}")
+                ax.set_xlabel("")
+                ax.set_ylabel("")
+                st.pyplot(fig)
+
+        st.subheader("🚻 Pohlavie podľa genotypu (všetky mutácie)")
+        cols = st.columns(len(mutacie))
+        for i, (mut_key, col_name) in enumerate(mutacie.items()):
+            with cols[i]:
+                genotypy = premapuj_na_genotyp(df[col_name])
+                fig, ax = plt.subplots()
+                sns.countplot(x=genotypy.map(lambda x: genotyp_label.get(x, x)), hue=df["pohavie"], ax=ax, order=[genotyp_label["wt/wt"], genotyp_label["wt/mut"], genotyp_label["mut/mut"]])
+                ax.set_title(f"{mut_key}")
+                ax.set_xlabel("")
+                ax.set_ylabel("")
+                st.pyplot(fig)
+
+        st.subheader("🩺 Diagnózy podľa genotypu (pečeňové ochorenia) (všetky mutácie)")
+        df["pecen_diag"] = df["diagnoza MKCH-10"].isin(["K76.0", "K75.9"])
+        cols = st.columns(len(mutacie))
+        for i, (mut_key, col_name) in enumerate(mutacie.items()):
+            with cols[i]:
+                genotypy = premapuj_na_genotyp(df[col_name])
+                fig, ax = plt.subplots()
+                sns.countplot(x=genotypy.map(lambda x: genotyp_label.get(x, x)), hue=df["pecen_diag"], ax=ax, order=[genotyp_label["wt/wt"], genotyp_label["wt/mut"], genotyp_label["mut/mut"]])
+                ax.set_title(f"{mut_key}")
+                ax.set_xlabel("")
+                ax.set_ylabel("")
+                ax.legend(title="Pečeňové ochorenie", labels=["Nie", "Áno"])
+                st.pyplot(fig)
 
 # =================== Sekcia: Analýza MKCH-10 ===================
 elif vyber_sekciu == "Analýza diagnóz podľa MKCH-10":
@@ -305,7 +372,7 @@ elif vyber_sekciu == "Analýza diagnóz podľa MKCH-10":
 st.sidebar.header("📤 Export reportu")
 
 if st.sidebar.button("Exportovať report (.docx)"):
-    with st.spinner("🛠️ Generujes sa Word report..."):
+    with st.spinner("🛠️ Generuje sa Word report..."):
         report_path = export_report.generate_report()
         with open(report_path, "rb") as f:
             st.sidebar.download_button(
