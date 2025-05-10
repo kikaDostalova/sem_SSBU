@@ -96,37 +96,60 @@ if vyber_sekciu == "Úvodná analýza":
 
     st.header("🧬 Hardy-Weinbergova rovnováha")
 
+    selected_hwe = st.selectbox("Zobraziť výsledky pre:", ["Sumár", *mutacie.keys()])
+
     def hardy_weinberg_test(genotypy):
         obs = genotypy.value_counts().reindex(["wt/wt", "wt/mut", "mut/mut"], fill_value=0)
         n = obs.sum()
         if n == 0:
             return None
-        p = (2*obs["wt/wt"] + obs["wt/mut"]) / (2*n)
+        p = (2 * obs["wt/wt"] + obs["wt/mut"]) / (2 * n)
         q = 1 - p
         exp = [p**2 * n, 2*p*q * n, q**2 * n]
-        chi2_stat = sum((obs - exp)**2 / exp)
+        chi2_contrib = ((obs - exp)**2 / exp)
+        chi2_stat = chi2_contrib.sum()
         pval = 1 - chi2.cdf(chi2_stat, df=1)
         df_result = pd.DataFrame({
             "Pozorované": obs,
-            "Očakávané": exp,
-            "Chi² príspevok": ((obs - exp)**2 / exp).round(3),
-            "p-hodnota": [pval]*3,
-            "Výsledok": ["Odchýlka" if pval < 0.05 else "Súlad"]*3
+            "Očakávané": [round(val, 2) for val in exp],
+            "Chi² príspevok": chi2_contrib.round(3),
+            "p-hodnota": [round(pval, 4)]*3,
+            "Výsledok": ["Odchýlka" if pval < 0.05 else "Súlad"] * 3
         })
         df_result.index = df_result.index.map(lambda x: genotyp_label.get(x, x))
         return df_result
 
-    for mut, col in mutacie.items():
-        st.subheader(f"Mutácia {mut}")
-        if col in df.columns:
+    if selected_hwe == "Sumár":
+        vysledky = []
+        for mut, col in mutacie.items():
             genotypy = premapuj_na_genotyp(df[col])
             result = hardy_weinberg_test(genotypy)
             if result is not None:
-                st.dataframe(result)
-            else:
-                st.warning(f"Mutácia {mut}: Nedostatočné dáta pre test.")
-        else:
-            st.warning(f"Stĺpec pre {mut} ({col}) sa nenašiel v datasete.")
+                poz = result["Pozorované"].values
+                ocz = result["Očakávané"].values
+                chi = result["Chi² príspevok"].sum()
+                pval = result["p-hodnota"].iloc[0]
+                vysledky.append({
+                    "Mutácia": mut,
+                    "Pozorované wt/wt": poz[0],
+                    "Pozorované wt/mut": poz[1],
+                    "Pozorované mut/mut": poz[2],
+                    "Očakávané wt/wt": ocz[0],
+                    "Očakávané wt/mut": ocz[1],
+                    "Očakávané mut/mut": ocz[2],
+                    "Chi²": round(chi, 4),
+                    "p-hodnota": round(pval, 4),
+                    "Výsledok": "Odchýlka" if pval < 0.05 else "Súlad"
+                })
+        st.dataframe(pd.DataFrame(vysledky))
+    else:
+        col = mutacie[selected_hwe]
+        genotypy = premapuj_na_genotyp(df[col])
+        result = hardy_weinberg_test(genotypy)
+        if result is not None:
+            st.subheader(f"Mutácia {selected_hwe}")
+            st.dataframe(result)
+
 
     st.header("📊 Percentá genotypov a prenášači")
 
@@ -183,20 +206,20 @@ if vyber_sekciu == "Úvodná analýza":
     df["pecen_diag"] = df["diagnoza MKCH-10"].isin(["K76.0", "K75.9"])
 
     for mut, col in mutacie.items():
-        if col in df.columns:
-            st.subheader(f"Mutácia {mut}")
-            genotypy = premapuj_na_genotyp(df[col])
-            kont_tab = pd.crosstab(genotypy, df["pecen_diag"])
-            kont_tab.index = kont_tab.index.map(lambda x: genotyp_label.get(x, x))
-            st.dataframe(kont_tab)
+        st.subheader(f"Mutácia {mut}")
+        genotypy = premapuj_na_genotyp(df[col])
+        kont_tab = pd.crosstab(genotypy, df["pecen_diag"])
+        kont_tab.index = kont_tab.index.map(lambda x: genotyp_label.get(x, x))
+        st.dataframe(kont_tab)
 
-            if kont_tab.shape[1] == 2:
-                chi2_stat, pval, dof, expected = chi2_contingency(kont_tab)
-                st.markdown(f"**p-hodnota**: `{pval:.4f}` {'(významné)' if pval < 0.05 else '(nevýznamné)'}")
-            else:
-                st.warning("Tabuľka nemá správny tvar na výpočet chi2 testu.")
+        if kont_tab.shape == (3, 2):  # 3x2
+            chi2_stat, pval, dof, expected = chi2_contingency(kont_tab)
+            st.markdown(f"Chi² test pre 3x2 tabuľku – p-hodnota: `{pval:.4f}` {'(významné)' if pval < 0.05 else '(nevýznamné)'})")
+        elif kont_tab.shape == (2, 2):  # binárna mutácia
+            chi2_stat, pval, dof, expected = chi2_contingency(kont_tab)
+            st.markdown(f"Chi² test pre 2x2 tabuľku – p-hodnota: `{pval:.4f}` {'(významné)' if pval < 0.05 else '(nevýznamné)'})")
         else:
-            st.warning(f"Stĺpec pre {mut} ({col}) sa nenašiel v datasete.")
+            st.warning("❗ Neštandardný tvar tabuľky – chi² test nemožno spoľahlivo vykonať.")
 
 # =================== Sekcia: Grafy ===================
 elif vyber_sekciu == "Grafy":
