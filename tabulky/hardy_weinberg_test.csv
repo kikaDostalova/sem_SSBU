@@ -1,0 +1,4 @@
+﻿Mutácia;Pozorované wt/wt (normal);Pozorované wt/mut (heterozygot);Pozorované mut/mut (mutant);Očakávané wt/wt (normal);Očakávané wt/mut (heterozygot);Očakávané mut/mut (mutant);Chi²;p-hodnota;Výsledok
+H63D;1209;421;0;1236.18;366.63;27.18;35.8444;0.0;Odchýlka
+S65C;1613;49;0;1613.36;48.28;0.36;0.372;0.5419;Súlad
+C282Y;1512;134;0;1514.73;128.55;2.73;2.9636;0.0852;Súlad

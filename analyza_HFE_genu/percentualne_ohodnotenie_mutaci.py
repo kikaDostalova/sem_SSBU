@@ -1,53 +1,70 @@
 import os
 import pandas as pd
 
-# zistenie absolutnej cesty k suboru
-base_dir = os.path.dirname(os.path.abspath(__file__))
-data_path = os.path.join(base_dir, "..", "SSBU25_dataset_cleaned.csv")
+def generate_percenta_genotypov(df):
+    output_dir = "tabulky"
+    os.makedirs(output_dir, exist_ok=True)
 
-# nacitanie datasetu
-df = pd.read_csv(data_path, sep=";", encoding="utf-8-sig")
+    df.columns = df.columns.str.replace('\n', ' ', regex=False).str.strip()
 
-# ocistenie nazvov stlpcov od \n a medzier
-df.columns = df.columns.str.replace('\n', ' ', regex=False).str.strip()
+    mutacie = {
+        "C282Y": "HFE G845A (C282Y) [HFE]",
+        "H63D": "HFE C187G (H63D) [HFE]",
+        "S65C": "HFE A193T (S65C) [HFE]"
+    }
 
-# mapovanie kratkych nazvov na skutocne stlpce
-mutacie = {
-    "C282Y": "HFE G845A (C282Y) [HFE]",
-    "H63D": "HFE C187G (H63D) [HFE]",
-    "S65C": "HFE A193T (S65C) [HFE]"
-}
+    genotyp_map = {
+        "normal": "wt/wt",
+        "heterozygot": "wt/mut",
+        "homozygot": "mut/mut"
+    }
 
-# funkcia na vypocet percent pre jeden gen
-def genotyp_percenta(mut_key):
-    stlpec = mutacie[mut_key]
-    print(f"\n📊 Genotypove zastupenie pre {mut_key}:")
-    counts = df[stlpec].value_counts()
-    total = counts.sum()
-    for gtype, count in counts.items():
-        percent = (count / total) * 100
-        print(f"{gtype}: {count} pacientov ({percent:.2f}%)")
+    genotyp_label = {
+        "wt/wt": "wt/wt (normal)",
+        "wt/mut": "wt/mut (heterozygot)",
+        "mut/mut": "mut/mut (mutant)"
+    }
 
-# zisti percenta pre kazdu mutaciu
-for mut in mutacie:
-    genotyp_percenta(mut)
+    vysledky = []
 
-# vypocet prenasacov (heterozygoti)
-pren = df[
-    (df[mutacie["C282Y"]] == "wt/mut") |
-    (df[mutacie["H63D"]] == "wt/mut") |
-    (df[mutacie["S65C"]] == "wt/mut")
-]
+    for mut_key, stlpec in mutacie.items():
+        if stlpec not in df.columns:
+            continue
 
-# geneticka predispozicia na HH
-predispozicia = df[
-    (df[mutacie["C282Y"]] == "mut/mut") |  # homozygot
-    (
-        (df[mutacie["C282Y"]] == "wt/mut") &
-        (df[mutacie["H63D"]] == "wt/mut")  # zlozeny heterozygot
-    )
-]
+        genotypy = df[stlpec].str.strip().str.lower().map(genotyp_map)
 
-# vypis
-print(f"\n🧬 Prenasaci: {len(pren)} pacientov ({(len(pren)/len(df))*100:.2f}%)")
-print(f"🧬 Geneticka predispozicia na HH: {len(predispozicia)} pacientov ({(len(predispozicia)/len(df))*100:.2f}%)")
+        total = len(genotypy.dropna())
+        counts = genotypy.value_counts()
+
+        for genotyp, pocet in counts.items():
+            vysledky.append({
+                "Mutácia": mut_key,
+                "Genotyp": genotyp_label.get(genotyp, genotyp),
+                "Počet pacientov": pocet,
+                "Percento": round((pocet / total) * 100, 2)
+            })
+
+    # Prenášači a predispozícia - celkové sumárne hodnoty
+    pren = df[
+        (df[mutacie["C282Y"]].str.strip().str.lower() == "heterozygot") |
+        (df[mutacie["H63D"]].str.strip().str.lower() == "heterozygot") |
+        (df[mutacie["S65C"]].str.strip().str.lower() == "heterozygot")
+    ]
+    predispozicia = df[
+        (df[mutacie["C282Y"]].str.strip().str.lower() == "homozygot") |
+        (
+            (df[mutacie["C282Y"]].str.strip().str.lower() == "heterozygot") &
+            (df[mutacie["H63D"]].str.strip().str.lower() == "heterozygot")
+        )
+    ]
+
+    vysledky_df = pd.DataFrame(vysledky)
+
+    # Exportuj tabuľku
+    vysledky_df.to_csv(os.path.join(output_dir, "percenta_genotypov.csv"), index=False, sep=";", encoding="utf-8-sig")
+
+    # Ulož sumár info o prenášačoch a predispozícii
+    summary_path = os.path.join(output_dir, "prenasic_predispozicia.txt")
+    with open(summary_path, "w", encoding="utf-8") as f:
+        f.write(f"Prenášači: {len(pren)} pacientov ({(len(pren)/len(df))*100:.2f}%)\n")
+        f.write(f"Genetická predispozícia na HH: {len(predispozicia)} pacientov ({(len(predispozicia)/len(df))*100:.2f}%)\n")
