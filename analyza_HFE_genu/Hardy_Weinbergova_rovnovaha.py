@@ -24,7 +24,10 @@ def generate_hwe_tables(df):
     genotyp_map = {
         "normal": "wt/wt",
         "heterozygot": "wt/mut",
-        "homozygot": "mut/mut"
+        "homozygot": "mut/mut",
+        "mutácia": "mut/mut",
+        "mutant": "mut/mut",
+        "patogénna": "mut/mut"
     }
 
     vysledky = []
