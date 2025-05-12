@@ -1,10 +1,20 @@
 import os
+import sys
 import pandas as pd
 from docx import Document
 from docx.shared import Inches, Pt
 from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
+
+script_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "analyza_HFE_genu"))
+sys.path.append(script_dir)
+
+from Hardy_Weinbergova_rovnovaha import generate_hwe_tables
+from percentualne_ohodnotenie_mutaci import generate_percenta_genotypov
+from suvislost_HFE_mut import generate_suvislosti_diag
+from graficka_reprezentacia import generate_graphs
+from diagnozy_MKCH_10 import generate_mkch10_analysis
 
 def add_table_from_csv(doc, csv_path, title):
     """Vloží tabuľku z CSV do dokumentu so zarámovaním buniek."""
@@ -39,8 +49,13 @@ def generate_report():
     grafy_dir = "grafy"
     tabulky_dir = "tabulky"
 
-    # === Načítaj dataset (kvôli úvodu) ===
     df = pd.read_csv(cleaned_dataset_path, sep=";", encoding="utf-8-sig")
+    
+    generate_hwe_tables(df)
+    generate_percenta_genotypov(df)
+    generate_suvislosti_diag(df)
+    generate_graphs(df)
+    generate_mkch10_analysis(df)
 
     # === Vytvor dokument ===
     doc = Document()

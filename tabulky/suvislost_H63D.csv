@@ -1,3 +1,4 @@
-﻿H63D_mutovany;False;True
-False;984;225
-True;379;74
+﻿HFE C187G (H63D) [HFE];False;True
+mut/mut (mutant);26;6
+wt/mut (heterozygot);353;68
+wt/wt (normal);984;225

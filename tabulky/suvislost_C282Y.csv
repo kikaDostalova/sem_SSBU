@@ -1,3 +1,4 @@
-﻿C282Y_mutovany;False;True
-False;1232;280
-True;131;19
+﻿HFE G845A (C282Y) [HFE];False;True
+mut/mut (mutant);14;2
+wt/mut (heterozygot);117;17
+wt/wt (normal);1232;280
