@@ -80,7 +80,10 @@ if uploaded_file:
         os.makedirs("sem_SSBU", exist_ok=True)
         df.to_csv("sem_SSBU/SSBU25_dataset_cleaned.csv", index=False, sep=";", encoding="utf-8-sig")
 
-        st.success("✅ Dataset bol úspešne načítaný a očistený.")
+        if "pohavie" in df.columns:
+            df.rename(columns={"pohavie": "Pohlavie"}, inplace=True)
+            df["Pohlavie"] = df["Pohlavie"].replace({"F": "Ž", "M": "M"})
+            st.success("✅ Dataset bol úspešne načítaný a očistený.")
 else:
     st.warning("⬆️ Nahrajte súbor vľavo v sidebare, aby sa zobrazili ďalšie sekcie.")
     st.stop()
@@ -254,7 +257,7 @@ elif vyber_sekciu == "Grafy":
             # 3. Vzťah genotypu a pohlavia
             st.subheader("🚻 Pohlavie podľa genotypu")
             fig3, ax3 = plt.subplots()
-            sns.countplot(x=genotypy.map(lambda x: genotyp_label.get(x, x)), hue=df["pohavie"], ax=ax3, order=[genotyp_label["wt/wt"], genotyp_label["wt/mut"], genotyp_label["mut/mut"]])
+            sns.countplot(x=genotypy.map(lambda x: genotyp_label.get(x, x)), hue=df["Pohlavie"], ax=ax3, order=[genotyp_label["wt/wt"], genotyp_label["wt/mut"], genotyp_label["mut/mut"]])
             ax3.set_xlabel("Genotyp")
             ax3.set_ylabel("Počet pacientov")
             st.pyplot(fig3)
@@ -300,7 +303,7 @@ elif vyber_sekciu == "Grafy":
             with cols[i]:
                 genotypy = premapuj_na_genotyp(df[col_name])
                 fig, ax = plt.subplots()
-                sns.countplot(x=genotypy.map(lambda x: genotyp_label.get(x, x)), hue=df["pohavie"], ax=ax, order=[genotyp_label["wt/wt"], genotyp_label["wt/mut"], genotyp_label["mut/mut"]])
+                sns.countplot(x=genotypy.map(lambda x: genotyp_label.get(x, x)), hue=df["Pohlavie"], ax=ax, order=[genotyp_label["wt/wt"], genotyp_label["wt/mut"], genotyp_label["mut/mut"]])
                 ax.set_title(f"{mut_key}")
                 ax.set_xlabel("")
                 ax.set_ylabel("")
